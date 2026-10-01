@@ -1,0 +1,6 @@
+{
+  "name": "Vistamation Horizon",
+  "description": "Vistamation Horizon — Autonomous logistics intelligence and the human dividend platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
