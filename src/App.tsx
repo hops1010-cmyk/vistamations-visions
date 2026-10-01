@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 
 // Types
 type FilterMode = 'global' | 'facility';
+type UnitSystem = 'metric' | 'imperial';
 
 interface SimulationState {
   facilities: number;
   forkliftsPerFacility: number;
   shiftHours: number;
   hourlyLaborRate: number;
+  palletWeightKg: number;
 }
 
 export default function App() {
@@ -16,6 +18,9 @@ export default function App() {
   
   // Human Dividend Filter
   const [dividendFilter, setDividendFilter] = useState<FilterMode>('global');
+
+  // Simulation Unit System (Metric vs Imperial)
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>('metric');
 
   // Live ticking counter for daily hours reclaimed
   const [reclaimedToday, setReclaimedToday] = useState(3427);
@@ -32,6 +37,7 @@ export default function App() {
     forkliftsPerFacility: 12,
     shiftHours: 16,
     hourlyLaborRate: 28,
+    palletWeightKg: 1840,
   });
 
   // Purchase modal form state
@@ -47,11 +53,29 @@ export default function App() {
   }, []);
 
   // Calculate simulation metrics
-  const annualForkliftHours = sim.facilities * sim.forkliftsPerFacility * sim.shiftHours * 350;
+  const totalFleetUnits = sim.facilities * sim.forkliftsPerFacility;
+  const annualForkliftHours = totalFleetUnits * sim.shiftHours * 350;
   const annualHoursReclaimed = Math.round(annualForkliftHours * 0.92);
   const annualGrossSavings = Math.round(annualHoursReclaimed * sim.hourlyLaborRate);
   const annualNetSavings = Math.round(annualGrossSavings * 0.72); // minus autonomous operating maintenance
-  const fatigueEventsAvoided = Math.round(sim.facilities * sim.forkliftsPerFacility * 4.8);
+  const fatigueEventsAvoided = Math.round(totalFleetUnits * 4.8);
+
+  // Floor weight calculations
+  // Average pallet cycles per hour per unit = 22
+  const dailyPalletMoves = totalFleetUnits * sim.shiftHours * 22;
+  const dailyWeightKg = dailyPalletMoves * sim.palletWeightKg;
+  const dailyWeightLbs = dailyWeightKg * 2.20462;
+  const liftRatingKg = sim.palletWeightKg;
+  const liftRatingLbs = Math.round(sim.palletWeightKg * 2.20462);
+
+  // Operational range calculations
+  // Average vehicle speed in active warehouse traffic = 3.6 km/h (2.237 mph)
+  const dailyRangeKm = totalFleetUnits * sim.shiftHours * 3.6;
+  const dailyRangeMiles = dailyRangeKm * 0.621371;
+  const perUnitRangeKm = sim.shiftHours * 3.6;
+  const perUnitRangeMiles = perUnitRangeKm * 0.621371;
+  const lidarPerimeterM = 15.0;
+  const lidarPerimeterFt = 49.2;
 
   const scrollTo = (id: string, navKey: string) => {
     setActiveNav(navKey);
@@ -1476,106 +1500,220 @@ export default function App() {
       {/* --- MODAL 1: Simulation Calculator Modal --- */}
       {showCalculator && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-          <div className="bg-surface-container-low border border-primary/30 rounded-2xl w-full max-w-2xl p-6 sm:p-8 shadow-2xl relative">
+          <div className="bg-surface-container-low border border-primary/30 rounded-2xl w-full max-w-3xl p-6 sm:p-8 shadow-2xl relative">
             <button
               onClick={() => setShowCalculator(false)}
-              className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center"
+              className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">close</span>
             </button>
 
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary-container/20 flex items-center justify-center text-primary-container">
-                <span className="material-symbols-outlined text-[24px]">calculate</span>
+            {/* Modal Header & Metric/Imperial Unit Toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pr-8 sm:pr-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-container/20 flex items-center justify-center text-primary-container shrink-0">
+                  <span className="material-symbols-outlined text-[24px]">calculate</span>
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-on-surface">Workforce &amp; Fleet Simulator</h3>
+                  <p className="text-xs text-on-surface-variant">Simulate autonomous logistics throughput, floor dynamics, and human dividend.</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-semibold text-on-surface">Workforce Dividend Simulator</h3>
-                <p className="text-xs text-on-surface-variant">Calculate time returned and operational yield for your logistics network.</p>
+
+              {/* Unit Toggle */}
+              <div className="flex items-center self-start sm:self-auto bg-surface-container-lowest p-1 rounded-xl border border-outline-variant/30">
+                <button
+                  type="button"
+                  onClick={() => setUnitSystem('metric')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
+                    unitSystem === 'metric'
+                      ? 'bg-primary-container text-on-primary-container font-semibold shadow-md'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${unitSystem === 'metric' ? 'bg-on-primary-container' : 'bg-transparent'}`} />
+                  <span>Metric (kg · km)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnitSystem('imperial')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
+                    unitSystem === 'imperial'
+                      ? 'bg-secondary text-on-secondary font-semibold shadow-md'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${unitSystem === 'imperial' ? 'bg-on-secondary' : 'bg-transparent'}`} />
+                  <span>Imperial (lbs · mi)</span>
+                </button>
               </div>
             </div>
 
             {/* Slider Inputs */}
             <div className="space-y-4 mb-6">
-              <div>
-                <div className="flex justify-between text-xs font-mono mb-1">
-                  <span className="text-on-surface">Operating Facilities</span>
-                  <span className="text-primary font-semibold">{sim.facilities} Centers</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-1">
+                    <span className="text-on-surface">Operating Facilities</span>
+                    <span className="text-primary font-semibold">{sim.facilities} Centers</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="30"
+                    value={sim.facilities}
+                    onChange={(e) => setSim({ ...sim, facilities: parseInt(e.target.value) })}
+                    className="w-full accent-[#00e5ff] cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="30"
-                  value={sim.facilities}
-                  onChange={(e) => setSim({ ...sim, facilities: parseInt(e.target.value) })}
-                  className="w-full accent-[#00e5ff] cursor-pointer"
-                />
+
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-1">
+                    <span className="text-on-surface">Active Forklifts per Facility</span>
+                    <span className="text-primary font-semibold">{sim.forkliftsPerFacility} Units</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="2"
+                    max="40"
+                    value={sim.forkliftsPerFacility}
+                    onChange={(e) => setSim({ ...sim, forkliftsPerFacility: parseInt(e.target.value) })}
+                    className="w-full accent-[#00e5ff] cursor-pointer"
+                  />
+                </div>
               </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-mono mb-1">
-                  <span className="text-on-surface">Active Forklifts per Facility</span>
-                  <span className="text-primary font-semibold">{sim.forkliftsPerFacility} Units</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-1">
+                    <span className="text-on-surface">Daily Operational Shift</span>
+                    <span className="text-primary font-semibold">{sim.shiftHours} Hours/Day</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="8"
+                    max="24"
+                    step="2"
+                    value={sim.shiftHours}
+                    onChange={(e) => setSim({ ...sim, shiftHours: parseInt(e.target.value) })}
+                    className="w-full accent-[#00e5ff] cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="2"
-                  max="40"
-                  value={sim.forkliftsPerFacility}
-                  onChange={(e) => setSim({ ...sim, forkliftsPerFacility: parseInt(e.target.value) })}
-                  className="w-full accent-[#00e5ff] cursor-pointer"
-                />
-              </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-mono mb-1">
-                  <span className="text-on-surface">Daily Operational Shift</span>
-                  <span className="text-primary font-semibold">{sim.shiftHours} Hours/Day</span>
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-1">
+                    <span className="text-on-surface">Rated Pallet Weight</span>
+                    <span className="text-primary font-semibold">
+                      {unitSystem === 'metric'
+                        ? `${sim.palletWeightKg.toLocaleString()} kg`
+                        : `${Math.round(sim.palletWeightKg * 2.20462).toLocaleString()} lbs`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="800"
+                    max="2600"
+                    step="20"
+                    value={sim.palletWeightKg}
+                    onChange={(e) => setSim({ ...sim, palletWeightKg: parseInt(e.target.value) })}
+                    className="w-full accent-[#00e5ff] cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="8"
-                  max="24"
-                  step="2"
-                  value={sim.shiftHours}
-                  onChange={(e) => setSim({ ...sim, shiftHours: parseInt(e.target.value) })}
-                  className="w-full accent-[#00e5ff] cursor-pointer"
-                />
-              </div>
 
-              <div>
-                <div className="flex justify-between text-xs font-mono mb-1">
-                  <span className="text-on-surface">Average Hourly Operator Cost</span>
-                  <span className="text-secondary font-semibold">${sim.hourlyLaborRate} / hr</span>
+                <div>
+                  <div className="flex justify-between text-xs font-mono mb-1">
+                    <span className="text-on-surface">Hourly Operator Cost</span>
+                    <span className="text-secondary font-semibold">${sim.hourlyLaborRate} / hr</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="18"
+                    max="55"
+                    value={sim.hourlyLaborRate}
+                    onChange={(e) => setSim({ ...sim, hourlyLaborRate: parseInt(e.target.value) })}
+                    className="w-full accent-[#ffb874] cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="18"
-                  max="55"
-                  value={sim.hourlyLaborRate}
-                  onChange={(e) => setSim({ ...sim, hourlyLaborRate: parseInt(e.target.value) })}
-                  className="w-full accent-[#ffb874] cursor-pointer"
-                />
               </div>
             </div>
 
-            {/* Results Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/30 mb-6">
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] text-on-surface-variant uppercase">Human Hours Reclaimed</span>
-                <span className="text-xl font-bold font-mono text-primary mt-0.5">
-                  {annualHoursReclaimed.toLocaleString()} <span className="text-xs">hrs/yr</span>
+            {/* Results Grid with Dynamic Floor Weight and Range Values */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 p-4 bg-surface-container-lowest rounded-xl border border-outline-variant/30 mb-6">
+              {/* Metric 1: Floor Weight Throughput */}
+              <div className="flex flex-col p-2.5 rounded-lg bg-surface-container/50 border border-outline-variant/30">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-primary uppercase font-semibold">Floor Weight</span>
+                  <span className="material-symbols-outlined text-primary text-[14px]">scale</span>
+                </div>
+                <span className="text-lg font-bold font-mono text-primary mt-1">
+                  {unitSystem === 'metric'
+                    ? `${(dailyWeightKg / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} t/day`
+                    : `${(dailyWeightLbs / 2000).toLocaleString(undefined, { maximumFractionDigits: 1 })} tons/day`}
+                </span>
+                <span className="font-mono text-[10px] text-on-surface-variant mt-0.5">
+                  {unitSystem === 'metric'
+                    ? `${liftRatingKg.toLocaleString()} kg / lift rating`
+                    : `${liftRatingLbs.toLocaleString()} lbs / lift rating`}
                 </span>
               </div>
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] text-on-surface-variant uppercase">Net OpEx Yield</span>
-                <span className="text-xl font-bold font-mono text-secondary mt-0.5">
-                  ${(annualNetSavings / 1_000_000).toFixed(2)}M <span className="text-xs">/yr</span>
+
+              {/* Metric 2: Operational Fleet Range */}
+              <div className="flex flex-col p-2.5 rounded-lg bg-surface-container/50 border border-outline-variant/30">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-secondary uppercase font-semibold">Fleet Range</span>
+                  <span className="material-symbols-outlined text-secondary text-[14px]">near_me</span>
+                </div>
+                <span className="text-lg font-bold font-mono text-secondary mt-1">
+                  {unitSystem === 'metric'
+                    ? `${Math.round(dailyRangeKm).toLocaleString()} km/day`
+                    : `${Math.round(dailyRangeMiles).toLocaleString()} mi/day`}
+                </span>
+                <span className="font-mono text-[10px] text-on-surface-variant mt-0.5">
+                  {unitSystem === 'metric'
+                    ? `${perUnitRangeKm.toFixed(1)} km/unit (${lidarPerimeterM.toFixed(1)}m LiDAR)`
+                    : `${perUnitRangeMiles.toFixed(1)} mi/unit (${lidarPerimeterFt.toFixed(1)}ft LiDAR)`}
                 </span>
               </div>
-              <div className="flex flex-col col-span-2 sm:col-span-1">
-                <span className="font-mono text-[10px] text-on-surface-variant uppercase">Fatigue Hazards Eradicated</span>
-                <span className="text-xl font-bold font-mono text-on-surface mt-0.5">
-                  {fatigueEventsAvoided} <span className="text-xs">annual vectors</span>
+
+              {/* Metric 3: Human Hours Reclaimed */}
+              <div className="flex flex-col p-2.5 rounded-lg bg-surface-container/50 border border-outline-variant/30">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-on-surface-variant uppercase font-semibold">Human Rest</span>
+                  <span className="material-symbols-outlined text-primary text-[14px]">timelapse</span>
+                </div>
+                <span className="text-lg font-bold font-mono text-on-surface mt-1">
+                  {annualHoursReclaimed.toLocaleString()} <span className="text-xs font-normal">hrs</span>
+                </span>
+                <span className="font-mono text-[10px] text-on-surface-variant mt-0.5">
+                  Annual time returned
+                </span>
+              </div>
+
+              {/* Metric 4: Net OpEx Yield */}
+              <div className="flex flex-col p-2.5 rounded-lg bg-surface-container/50 border border-outline-variant/30">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-on-surface-variant uppercase font-semibold">Net OpEx Yield</span>
+                  <span className="material-symbols-outlined text-secondary text-[14px]">payments</span>
+                </div>
+                <span className="text-lg font-bold font-mono text-secondary mt-1">
+                  ${(annualNetSavings / 1_000_000).toFixed(2)}M
+                </span>
+                <span className="font-mono text-[10px] text-on-surface-variant mt-0.5">
+                  Annual net savings
+                </span>
+              </div>
+
+              {/* Metric 5: Fatigue Hazards Eradicated */}
+              <div className="flex flex-col p-2.5 rounded-lg bg-surface-container/50 border border-outline-variant/30 col-span-2 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-on-surface-variant uppercase font-semibold">Fatigue Voided</span>
+                  <span className="material-symbols-outlined text-primary text-[14px]">health_and_safety</span>
+                </div>
+                <span className="text-lg font-bold font-mono text-on-surface mt-1">
+                  {fatigueEventsAvoided}
+                </span>
+                <span className="font-mono text-[10px] text-on-surface-variant mt-0.5">
+                  Annual risk vectors
                 </span>
               </div>
             </div>
@@ -1583,7 +1721,7 @@ export default function App() {
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowCalculator(false)}
-                className="px-4 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface"
+                className="px-4 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
               >
                 Close
               </button>
@@ -1592,7 +1730,7 @@ export default function App() {
                   setShowCalculator(false);
                   scrollTo('executive-pack', 'executive');
                 }}
-                className="px-5 py-2.5 rounded-lg bg-primary-container text-on-primary-container font-semibold hover:bg-primary-fixed text-xs flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-lg bg-primary-container text-on-primary-container font-semibold hover:bg-primary-fixed text-xs flex items-center gap-1.5 shadow-[0_0_16px_rgba(0,229,255,0.3)] transition-all"
               >
                 <span>Export Full Scenario in Executive Pack</span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
